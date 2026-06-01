@@ -927,16 +927,6 @@ async function loadWorkflow() {
                         tgtId, ed.target_input  ?? 'in',
                         ed.percentage);
             });
-        } else {
-            // Default demo layout with split rule
-            // Default demo layout with split rule
-            const a = addNode('income',  80,  160, { label: 'Income A', amount: 5000000, frequency: 'monthly' });
-            const b = addNode('rule',   320,  160, { label: 'Split Rule', rule_type: 'split' });
-            const c = addNode('outcome', 560,  80, { label: 'Savings', amount: 1000000, frequency: 'monthly', category: 'Tabungan' });
-            const d = addNode('outcome', 560, 280, { label: 'Electricity', amount: 500000,  frequency: 'monthly', category: 'Listrik' });
-            addEdge(a, 'out', b, 'in');
-            addEdge(b, 'out', c, 'in', 60);  // 60% to savings
-            addEdge(b, 'out', d, 'in', 40);  // 40% to electricity
         }
         updateAllocationFields();
         drawEdges();
