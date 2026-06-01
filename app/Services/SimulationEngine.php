@@ -337,18 +337,47 @@ class SimulationEngine
                     $deductionKey = 'period_' . $period . '_expense_' . $targetId;
                     if (!isset($periodFiredExpenses[$deductionKey])) {
                         $periodFiredExpenses[$deductionKey] = true;
-                        $balance -= $fullExpenseAmount;
-                        $periodExpense += $fullExpenseAmount;
+                        
+                        // Deduct only the allocated amount
+                        $balance -= $allocatedAmount;
+                        $periodExpense += $allocatedAmount;
+                        
+                        // Log the allocated payment
+                        $events[] = [
+                            'period' => $period,
+                            'type' => 'expense',
+                            'node' => $target->name,
+                            'amount' => round($allocatedAmount, 2),
+                            'balance' => round($balance, 2),
+                        ];
+                        
+                        // Calculate remaining debt or surplus
+                        $remaining = $fullExpenseAmount - $allocatedAmount;
+                        
+                        if ($remaining > 0) {
+                            // Debt: expense is more than allocated
+                            $periodExpense += $remaining;
+                            $balance -= $remaining;
+                            $events[] = [
+                                'period' => $period,
+                                'type' => 'expense',
+                                'node' => $target->name . ' (debt)',
+                                'amount' => round($remaining, 2),
+                                'balance' => round($balance, 2),
+                            ];
+                        } elseif ($remaining < 0) {
+                            // Surplus: allocated is more than expense
+                            $surplus = abs($remaining);
+                            $balance += $surplus;
+                            $events[] = [
+                                'period' => $period,
+                                'type' => 'income',
+                                'node' => $target->name . ' (surplus)',
+                                'amount' => round($surplus, 2),
+                                'balance' => round($balance, 2),
+                            ];
+                        }
                     }
-                    
-                    // Log shows the FULL expense amount (not just allocated)
-                    $events[] = [
-                        'period' => $period,
-                        'type' => 'expense',
-                        'node' => $target->name,
-                        'amount' => round($fullExpenseAmount, 2),
-                        'balance' => round($balance, 2),
-                    ];
                     
                     if (!isset($firedOnce[$targetId])) {
                         $data = $target->data_json ?? [];
