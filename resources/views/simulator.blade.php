@@ -1379,9 +1379,9 @@ function renderSimResults(data) {
         } else if (l.type === 'expense') {
             // Check if this is a debt entry
             if (l.is_debt) {
-                // Debt - use brown color
-                color = '#a16207';
-                bg = 'rgba(161,98,7,.15)';
+                // Debt - use red color
+                color = '#f87171';
+                bg = 'rgba(248,113,113,.15)';
             } else {
                 // Regular expense - use purple
                 color = '#a78bfa';
