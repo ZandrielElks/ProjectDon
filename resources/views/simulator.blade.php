@@ -35,6 +35,7 @@
                 </div>
             </div>
             <button class="btn btn-outline" onclick="openSimModal()" style="border-color:#6366f1;color:#6366f1;">&#9654; Jalankan Simulasi</button>
+            <button class="btn btn-outline" onclick="autoLayoutDiagram()" style="border-color:#22d3ee;color:#22d3ee;">📐 Auto Layout</button>
             <button class="btn btn-primary" onclick="saveWorkflow()">Simpan Workflow</button>
             <button class="btn btn-outline" onclick="if(confirm('Clear all nodes and start fresh?')) { nodes = {}; edges = []; nodeCounter = 1; edgeCounter = 1; inner.innerHTML = ''; drawEdges(); showToast('Workflow cleared'); }" style="border-color:#ef4444;color:#ef4444;">🗑️ Clear</button>
         </div>
@@ -46,10 +47,10 @@
 
         <div id="flowCanvas"
              style="position:relative;width:100%;height:620px;overflow:hidden;cursor:grab;
-                    background:radial-gradient(circle at 1px 1px,rgba(255,255,255,.05) 1px,transparent 0);
-                    background-size:28px 28px;">
+                    background:#1a1a1a;background-image:radial-gradient(circle,#333 0.5px,transparent 0.5px);
+                    background-size:20px 20px;">
             <div id="canvasInner" style="position:absolute;top:0;left:0;transform-origin:0 0;"></div>
-            <div id="zoomHint" style="position:absolute;bottom:10px;left:12px;font-size:.68rem;color:rgba(255,255,255,.3);pointer-events:none;">
+            <div id="zoomHint" style="position:absolute;bottom:10px;left:12px;font-size:.68rem;color:rgba(255,255,255,.25);pointer-events:none;">
                 Scroll to zoom &nbsp;|&nbsp; Alt+drag or middle-click to pan
             </div>
         </div>
@@ -59,17 +60,20 @@
              style="display:none;position:absolute;top:1rem;right:1rem;width:420px;max-height:595px;
                     background:rgba(13,13,26,.97);border:1px solid rgba(255,255,255,.12);
                     border-radius:12px;box-shadow:0 20px 40px rgba(0,0,0,.55);
-                    overflow-y:auto;z-index:50;padding:1.25rem;">
+                    overflow-y:auto;overflow-x:hidden;z-index:50;padding:1.25rem;box-sizing:border-box;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
                 <h3 style="margin:0;font-size:1rem;color:#e2e8f0;">&#128202; Simulation Results</h3>
                 <div style="display:flex;gap:0.5rem;align-items:center;">
                     <button onclick="saveSimulationTransactions()" id="saveTxnBtn"
                             style="background:#10b981;border:none;color:white;padding:0.4rem 0.8rem;border-radius:6px;cursor:pointer;font-size:0.75rem;font-weight:600;">
-                        💾 Save Transactions
+                        Save Transactions
                     </button>
                     <button onclick="enableDragging(); document.getElementById('simResults').style.display='none'"
                             style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:1.1rem;line-height:1;">&#10005;</button>
                 </div>
+            </div>
+            <div style="display:flex;gap:0.5rem;align-items:center;margin-bottom:1rem;padding:0.75rem;background:rgba(255,255,255,.05);border-radius:8px;">
+                <button onclick="toggleAnimationPause()" id="pausePlayBtn" style="background:#f59e0b;border:none;color:white;padding:0.4rem 0.8rem;border-radius:4px;cursor:pointer;font-size:0.75rem;font-weight:600;">⏸ Pause</button>
             </div>
             <div id="simSummary" style="display:grid;grid-template-columns:repeat(3,1fr);gap:.6rem;margin-bottom:1rem;"></div>
             <div style="margin-bottom:.8rem;">
@@ -167,7 +171,7 @@
     transition: transform .1s;
 }
 .port-dot:hover { transform: scale(1.45); }
-.port-in  { background: #6366f1; margin-right: .4rem; }
+.port-in  { background: #abaceeff; margin-right: .4rem; }
 .port-out { background: #22d3ee; margin-left:  .4rem; }
 
 .node-field { margin: .38rem 0; }
@@ -229,6 +233,7 @@
 
 @section('scripts')
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dagre@0.8.5/dist/dagre.min.js"></script>
 <script>
 // ═══════════════════════════════════════════════════════════════════════
 //  BagStack Simulator — node-graph engine + simulation UI
@@ -622,6 +627,21 @@ function addEdge(fromNode, fromPort, toNode, toPort, percentage = null) {
         }
     }
 
+    // Validation: Expense can only be connected BY ONE rule
+    const toNodeObj = nodes[toNode];
+    if (toNodeObj && toNodeObj.type === 'outcome') {
+        // Check if this outcome already has an incoming connection from any rule
+        const existingRuleConnection = edges.find(e => 
+            String(e.toNode) === toNode && 
+            nodes[e.fromNode] && 
+            nodes[e.fromNode].type === 'rule'
+        );
+        if (existingRuleConnection) {
+            showToast('Expense can only be connected by ONE rule at a time!', true);
+            return;
+        }
+    }
+
     if (wouldCreateCycle(fromNode, toNode)) {
         showToast('Connection would create a loop — not allowed!', true);
         return;
@@ -938,6 +958,7 @@ async function runSimulation() {
     closeSimModal();
     simulationCompleted = false;  // Reset flag for new simulation
     animationCancelled = false;   // Reset cancellation flag for new simulation
+    currentPeriod = 1;            // Reset to period 1 when starting new simulation
     await saveWorkflow();
     showToast('Running simulation…');
     try {
@@ -955,20 +976,21 @@ async function runSimulation() {
 
 // ── Animation: step-by-step flow visualization ────────────────────────
 const ANIMATION_CONFIG = {
-    nodeDuration: 400,        // How long to highlight each node (ms)
-    arrowDuration: 400,       // How long to highlight each arrow (ms)
+    nodeDuration: 200,        // How long to highlight each node (ms)
+    arrowDuration: 200,       // How long to highlight each arrow (ms)
     nodeSleep: 0,             // Extra sleep after node highlight (ms)
     arrowSleep: 100,          // Extra sleep after arrow highlight (ms)
     nodeColor: '#c52d2dff',     // Node highlight color
-    nodeGlow: 30,             // Node glow blur (px)
+    nodeGlow: 50,             // Node glow blur (px)
     arrowColor: '#c52d2dff',    // Arrow highlight color
-    arrowGlow: 25,            // Arrow glow blur (px)
+    arrowGlow: 20,            // Arrow glow blur (px)
 };
 
 let animationRunning = false;
 let animationCancelled = false;
 let simulationCompleted = false;  // Track if simulation has been run
 let lastSimulationData = null;  // Store last simulation results for saving
+let animationPaused = false;    // Track if animation is paused
 
 async function playSimulationAnimation(data) {
     lastSimulationData = data;  // Store for later use
@@ -977,6 +999,7 @@ async function playSimulationAnimation(data) {
 
     animationRunning = true;
     animationCancelled = false;
+    animationPaused = false;
 
     // Show period marker
     let marker = document.getElementById('animMarker');
@@ -1001,6 +1024,11 @@ async function playSimulationAnimation(data) {
     for (let p = 1; p <= data.periods; p++) {
         if (animationCancelled) break;
         
+        // Wait if paused
+        while (animationPaused && !animationCancelled) {
+            await sleep(100);
+        }
+        
         marker.textContent = `Period ${p} / ${data.periods}`;
         marker.style.display = 'block';
 
@@ -1010,40 +1038,64 @@ async function playSimulationAnimation(data) {
             continue;
         }
 
-        // Build animation steps: [node1, arrow1→2, node2, arrow2→3, node3, ...]
-        const steps = buildAnimationSteps(periodLogs);
-        
-        // Execute each step
-        let lastNodeId = null;
-        for (let i = 0; i < steps.length; i++) {
+        // Get all income nodes that appear in this period's logs
+        const incomeNodesInPeriod = new Set();
+        periodLogs.forEach(log => {
+            const nodeId = String(Object.keys(nodes).find(id => nodes[id].name === log.node) || '');
+            if (nodeId && nodes[nodeId]?.type === 'income') {
+                incomeNodesInPeriod.add(nodeId);
+            }
+        });
+
+        // Animate each income branch separately
+        for (const incomeId of incomeNodesInPeriod) {
             if (animationCancelled) break;
             
-            const step = steps[i];
-            
-            if (step.type === 'node') {
-                // Clear previous node highlight if exists
-                if (lastNodeId !== null) {
-                    clearNodeHighlight(lastNodeId);
-                }
-                highlightNode(step.id);
-                lastNodeId = step.id;
-                await sleep(ANIMATION_CONFIG.nodeDuration + ANIMATION_CONFIG.nodeSleep);
-            } else if (step.type === 'arrow') {
-                // Clear the current node highlight before showing arrow
-                if (lastNodeId !== null) {
-                    clearNodeHighlight(lastNodeId);
-                    lastNodeId = null;
-                }
-                highlightArrow(step.from, step.to);
-                await animateFlowParticle(step.from, step.to, ANIMATION_CONFIG.arrowDuration);
-                clearArrowHighlight(step.from, step.to);
-                await sleep(ANIMATION_CONFIG.arrowSleep);
+            // Wait if paused
+            while (animationPaused && !animationCancelled) {
+                await sleep(100);
             }
-        }
+            
+            // Build animation steps for this specific income
+            const steps = buildAnimationStepsForIncome(incomeId);
+            
+            // Execute each step
+            let lastNodeId = null;
+            for (let i = 0; i < steps.length; i++) {
+                if (animationCancelled) break;
+                
+                // Wait if paused
+                while (animationPaused && !animationCancelled) {
+                    await sleep(100);
+                }
+                
+                const step = steps[i];
+                
+                if (step.type === 'node') {
+                    // Clear previous node highlight if exists
+                    if (lastNodeId !== null) {
+                        clearNodeHighlight(lastNodeId);
+                    }
+                    highlightNode(step.id);
+                    lastNodeId = step.id;
+                    await sleep(ANIMATION_CONFIG.nodeDuration + ANIMATION_CONFIG.nodeSleep);
+                } else if (step.type === 'arrow') {
+                    // Clear the current node highlight before showing arrow
+                    if (lastNodeId !== null) {
+                        clearNodeHighlight(lastNodeId);
+                        lastNodeId = null;
+                    }
+                    highlightArrow(step.from, step.to);
+                    await animateFlowParticle(step.from, step.to, ANIMATION_CONFIG.arrowDuration);
+                    clearArrowHighlight(step.from, step.to);
+                    await sleep(ANIMATION_CONFIG.arrowSleep);
+                }
+            }
 
-        // Clear the last node highlight if still active
-        if (lastNodeId !== null) {
-            clearNodeHighlight(lastNodeId);
+            // Clear the last node highlight if still active
+            if (lastNodeId !== null) {
+                clearNodeHighlight(lastNodeId);
+            }
         }
         
         await sleep(200);
@@ -1051,7 +1103,8 @@ async function playSimulationAnimation(data) {
 
     marker.style.display = 'none';
     animationRunning = false;
-    // Don't set simulationCompleted here - let enableDragging() handle it
+    animationPaused = false;
+    document.getElementById('pausePlayBtn').textContent = '⏸ Pause';
 }
 
 function stopAnimation() {
@@ -1085,32 +1138,28 @@ function enableDragging() {
     if (marker) marker.style.display = 'none';
 }
 
-// Build step sequence from logs: node → arrow → node → arrow → ...
-function buildAnimationSteps(periodLogs) {
+// Build step sequence for a single income: node → arrow → node → arrow → ...
+function buildAnimationStepsForIncome(incomeId) {
     const steps = [];
+    incomeId = String(incomeId);
     
-    if (periodLogs.length === 0) return steps;
-
-    // Get all unique node names from logs
-    const loggedNodeNames = new Set();
-    periodLogs.forEach(log => loggedNodeNames.add(log.node));
-    
-    // Convert names to IDs
-    const loggedNodeIds = new Set();
-    loggedNodeNames.forEach(name => {
-        const id = String(Object.keys(nodes).find(nodeId => nodes[nodeId].name === name) || '');
-        if (id) loggedNodeIds.add(id);
-    });
-    
-    // Now trace paths through the graph
     const visited = new Set();
     const addedEdges = new Set();
     
     function traceFlow(nodeId) {
-        nodeId = String(nodeId);  // Ensure string
+        nodeId = String(nodeId);
         
         if (visited.has(nodeId)) return;
         visited.add(nodeId);
+        
+        // Skip one-time outcome nodes from animation
+        const node = nodes[nodeId];
+        if (node && node.type === 'outcome') {
+            const freq = node.data?.frequency || 'monthly';
+            if (freq === 'one-time') {
+                return; // Don't animate one-time expenses
+            }
+        }
         
         // Add this node
         steps.push({ type: 'node', id: nodeId });
@@ -1118,36 +1167,26 @@ function buildAnimationSteps(periodLogs) {
         // Find outgoing edges and trace them
         const outgoingEdges = edges.filter(e => String(e.fromNode) === nodeId);
         
-        console.log(`Tracing from ${nodes[nodeId]?.name} (${nodeId}), found ${outgoingEdges.length} outgoing edges`);
-        
         for (const edge of outgoingEdges) {
-            const targetId = String(edge.toNode);  // Ensure string
+            const targetId = String(edge.toNode);
             const edgeKey = `${nodeId}->${targetId}`;
             
-            // Only add edge once
+            // Only add edge once per income trace
             if (!addedEdges.has(edgeKey)) {
                 steps.push({ type: 'arrow', from: nodeId, to: targetId });
                 addedEdges.add(edgeKey);
             }
             
-            // ALWAYS recurse into the target, regardless of whether it's in logged nodes
-            // This ensures we follow all edges, especially rule-to-rule connections
+            // Recurse into the target
             if (!visited.has(targetId)) {
                 traceFlow(targetId);
             }
         }
     }
     
-    // Start from each income node that appears in logs
-    const processedIncomes = new Set();
-    periodLogs.forEach(log => {
-        const nodeId = String(Object.keys(nodes).find(id => nodes[id].name === log.node) || '');
-        if (nodeId && nodes[nodeId]?.type === 'income' && !processedIncomes.has(nodeId)) {
-            processedIncomes.add(nodeId);
-            traceFlow(nodeId);
-        }
-    });
-
+    // Start tracing from this income
+    traceFlow(incomeId);
+    
     return steps;
 }
 
@@ -1355,7 +1394,7 @@ async function saveSimulationTransactions() {
 
     const saveTxnBtn = document.getElementById('saveTxnBtn');
     saveTxnBtn.disabled = true;
-    saveTxnBtn.textContent = '💾 Saving...';
+    saveTxnBtn.textContent = 'Saving...';
 
     try {
         // Prepare transactions from simulation logs
@@ -1429,7 +1468,7 @@ async function saveSimulationTransactions() {
         if (transactions.length === 0) {
             showToast('No transactions to save!', true);
             saveTxnBtn.disabled = false;
-            saveTxnBtn.textContent = '💾 Save Transactions';
+            saveTxnBtn.textContent = 'Save Transactions';
             return;
         }
 
@@ -1449,19 +1488,75 @@ async function saveSimulationTransactions() {
             showToast(`✅ Saved ${result.count} transactions!`);
             saveTxnBtn.textContent = '✓ Saved';
             setTimeout(() => {
-                saveTxnBtn.textContent = '💾 Save Transactions';
+                saveTxnBtn.textContent = 'Save Transactions';
                 saveTxnBtn.disabled = false;
             }, 2000);
         } else {
             showToast(result.message || 'Failed to save transactions', true);
             saveTxnBtn.disabled = false;
-            saveTxnBtn.textContent = '💾 Save Transactions';
+            saveTxnBtn.textContent = 'Save Transactions';
         }
     } catch (error) {
         showToast('Error saving transactions: ' + error.message, true);
         saveTxnBtn.disabled = false;
-        saveTxnBtn.textContent = '💾 Save Transactions';
+        saveTxnBtn.textContent = 'Save Transactions';
     }
+}
+
+// ── Period Navigation & Chart Updates ──────────────────────────────────
+function toggleAnimationPause() {
+    if (!animationRunning) return;
+    animationPaused = !animationPaused;
+    const btn = document.getElementById('pausePlayBtn');
+    btn.textContent = animationPaused ? '▶ Play' : '⏸ Pause';
+}
+
+// ── Auto Layout using Dagre ───────────────────────────────────────────
+function autoLayoutDiagram() {
+    if (Object.keys(nodes).length === 0) {
+        showToast('No nodes to layout!', true);
+        return;
+    }
+
+    // Create a new Dagre graph
+    const g = new dagre.graphlib.Graph({ compound: false });
+    g.setGraph({ rankdir: 'TB', nodesep: 80, ranksep: 100 });
+    g.setDefaultEdgeLabel(() => ({}));
+
+    // Add all nodes to the graph with their current dimensions
+    Object.values(nodes).forEach(node => {
+        const width = node.el.offsetWidth || 200;
+        const height = node.el.offsetHeight || 150;
+        g.setNode(String(node.id), { width, height });
+    });
+
+    // Add all edges to the graph
+    edges.forEach(edge => {
+        g.setEdge(String(edge.fromNode), String(edge.toNode));
+    });
+
+    // Run Dagre layout algorithm
+    dagre.layout(g);
+
+    // Apply the calculated positions to nodes
+    g.nodes().forEach(nodeId => {
+        const node = nodes[nodeId];
+        if (node) {
+            const pos = g.node(nodeId);
+            // Dagre positions are centered, but we need top-left for absolute positioning
+            const x = pos.x - (pos.width / 2);
+            const y = pos.y - (pos.height / 2);
+            
+            node.x = Math.max(0, x);
+            node.y = Math.max(0, y);
+            node.el.style.left = node.x + 'px';
+            node.el.style.top = node.y + 'px';
+        }
+    });
+
+    // Redraw edges with new positions
+    drawEdges();
+    showToast('✨ Diagram auto-laid out!');
 }
 
 // ── Boot ───────────────────────────────────────────────────────────────
