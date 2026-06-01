@@ -58,7 +58,19 @@
                         @foreach($groupTransactions as $txn)
                         <tr>
                             <td style="padding: 0.5rem;">{{ \Carbon\Carbon::parse($txn->date)->format('d M Y') }}</td>
-                            <td style="padding: 0.5rem;"><span class="badge {{ $txn->type == 'income' ? 'badge-income' : 'badge-expense' }}">{{ $txn->category->name }}</span></td>
+                            <td style="padding: 0.5rem;">
+                                @php
+                                    $badgeClass = $txn->type == 'income' ? 'badge-income' : 'badge-expense';
+                                    $badgeColor = $txn->type == 'income' ? '#4ade80' : '#f87171';
+                                    // Brown color for Tagihan (debt)
+                                    if ($txn->category->name === 'Tagihan') {
+                                        $badgeColor = '#a16207';
+                                    }
+                                @endphp
+                                <span class="badge" style="background: {{ $badgeColor }}22; color: {{ $badgeColor }}; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">
+                                    {{ $txn->category->name }}
+                                </span>
+                            </td>
                             <td style="padding: 0.5rem; color: var(--text-muted);">{{ $txn->description }}</td>
                             <td style="padding: 0.5rem; text-align: right; font-weight: 600; color: {{ $txn->type == 'income' ? 'var(--success)' : 'var(--danger)' }}">
                                 {{ $txn->type == 'income' ? '+' : '-' }} Rp {{ number_format($txn->amount, 0, ',', '.') }}

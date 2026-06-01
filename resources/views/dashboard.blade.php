@@ -8,8 +8,6 @@
         <h1>📊 Dashboard Keuangan</h1>
         <form action="{{ route('dashboard') }}" method="GET" class="flex gap-2">
             <select name="range" onchange="this.form.submit()" class="form-control" style="width: auto;">
-                <option value="today" {{ $range == 'today' ? 'selected' : '' }}>Hari Ini</option>
-                <option value="this_week" {{ $range == 'this_week' ? 'selected' : '' }}>Minggu Ini</option>
                 <option value="this_month" {{ $range == 'this_month' ? 'selected' : '' }}>Bulan Ini</option>
                 <option value="all_time" {{ $range == 'all_time' ? 'selected' : '' }}>Semua Waktu</option>
             </select>

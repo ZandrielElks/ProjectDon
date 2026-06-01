@@ -18,12 +18,6 @@ class DashboardController extends Controller
         $endDate = Carbon::now();
 
         switch ($range) {
-            case 'today':
-                $startDate = Carbon::today();
-                break;
-            case 'this_week':
-                $startDate = Carbon::now()->startOfWeek();
-                break;
             case 'this_month':
                 $startDate = Carbon::now()->startOfMonth();
                 break;

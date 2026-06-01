@@ -1377,22 +1377,15 @@ function renderSimResults(data) {
             color = '#fbbf24';
             bg = 'rgba(251,191,36,.15)';
         } else if (l.type === 'expense') {
-            // Check if this is a paid expense with no debt/surplus
-            if (!l.node.includes('(debt)') && !l.node.includes('(surplus)')) {
-                // Fully paid expense - use purple
+            // Check if this is a debt entry
+            if (l.is_debt) {
+                // Debt - use brown color
+                color = '#a16207';
+                bg = 'rgba(161,98,7,.15)';
+            } else {
+                // Regular expense - use purple
                 color = '#a78bfa';
                 bg = 'rgba(167,139,250,.15)';
-            } else if (l.node.includes('(debt)')) {
-                // Debt - use red
-                color = '#f87171';
-                bg = 'rgba(248,113,113,.15)';
-            } else if (l.node.includes('(surplus)')) {
-                // Surplus - use green
-                color = '#4ade80';
-                bg = 'rgba(74,222,128,.15)';
-            } else {
-                color = '#f87171';
-                bg = 'rgba(248,113,113,.15)';
             }
         } else {
             color = '#f87171';
@@ -1402,11 +1395,14 @@ function renderSimResults(data) {
         // Handle "Split" text for rule amounts
         const amountDisplay = (typeof l.amount === 'string') ? l.amount : fmt(l.amount);
         
+        // Show "(paid)" for debt entries instead of node name
+        const displayNode = l.is_debt ? `${l.node} (paid)` : l.node;
+        
         return `<tr>
             <td style="padding:.25rem .5rem;color:#94a3b8;">${l.period}</td>
             <td style="padding:.25rem .5rem;">
                 <span style="padding:.1rem .4rem;border-radius:4px;font-size:.65rem;font-weight:600;background:${bg};color:${color};">${l.type}</span>
-                <span style="color:#64748b;margin-left:.3rem;font-size:.68rem;">${l.node}</span>
+                <span style="color:#64748b;margin-left:.3rem;font-size:.68rem;">${displayNode}</span>
             </td>
             <td style="text-align:right;padding:.25rem .5rem;color:${color};">${amountDisplay}</td>
         </tr>`;
@@ -1504,12 +1500,19 @@ async function saveSimulationTransactions() {
                     txnDate.setFullYear(txnDate.getFullYear() + period);
                 }
                 
+                // Check if this is a debt entry
+                const categoryName = log.is_debt ? 'Tagihan' : log.node;
+                const description = log.is_debt 
+                    ? `Debt: ${log.node} from period ${log.period}`
+                    : `Simulated expense from period ${log.period}`;
+                
                 transactions.push({
                     amount: amount,
                     type: 'expense',
-                    category_name: log.node,
-                    description: `Simulated expense from period ${log.period}`,
-                    date: txnDate.toISOString().split('T')[0]
+                    category_name: categoryName,
+                    description: description,
+                    date: txnDate.toISOString().split('T')[0],
+                    is_debt: log.is_debt || false
                 });
             }
         });
