@@ -220,6 +220,25 @@
     border-color: #6366f1;
 }
 
+/* Allocation field number input styling */
+.allocation-field input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+    color-scheme: dark;
+}
+.allocation-field input[type="number"]::-webkit-outer-spin-button,
+.allocation-field input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: inner-spin-button;
+    display: flex;
+    background: rgba(99,102,241,.2);
+    color: #a78bfa;
+    border-left: 1px solid rgba(99,102,241,.3);
+}
+.allocation-field input[type="number"]:focus {
+    outline: none;
+    border-color: #a78bfa;
+}
+
 .node-menu-item {
     padding: .55rem 1rem;
     cursor: pointer;
@@ -458,19 +477,11 @@ function updateAllocationFields() {
                 return;
             }
             
-            // Auto-distribute percentages to fit within 100% total
+            // Calculate current total
             let totalPercentage = 0;
             outgoingEdges.forEach(edge => {
                 totalPercentage += edge.percentage || 100;
             });
-            
-            // If total exceeds 100%, redistribute proportionally
-            if (totalPercentage > 100) {
-                outgoingEdges.forEach(edge => {
-                    edge.percentage = Math.round((edge.percentage || 100) * (100 / totalPercentage));
-                });
-                totalPercentage = 100;
-            }
             
             // Render allocation fields
             outgoingEdges.forEach((edge, idx) => {
@@ -493,31 +504,16 @@ function updateAllocationFields() {
                 input.disabled = outgoingEdges.length === 1;  // Disable if only one connection
                 input.style.cssText = 'width:50px;padding:.2rem .4rem;border-radius:4px;border:1px solid rgba(255,255,255,.13);background:rgba(255,255,255,.07);color:#e2e8f0;font-size:.7rem;font-family:inherit;' + (outgoingEdges.length === 1 ? 'opacity:0.6;cursor:not-allowed;' : '');
                 
-                input.addEventListener('input', e => {
+                input.addEventListener('change', e => {
                     let newVal = parseFloat(e.target.value) || 0;
-                    newVal = Math.max(0, Math.min(100, newVal)); // Clamp to 0-100 first
+                    newVal = Math.max(0, Math.min(100, newVal)); // Clamp to 0-100
                     
                     // If only one connection, force 100%
                     if (outgoingEdges.length === 1) {
                         newVal = 100;
                         input.value = 100;
-                        input.disabled = true;  // Make it uneditable
                         edge.percentage = 100;
                     } else {
-                        // Calculate total from OTHER edges
-                        const otherTotal = outgoingEdges
-                            .filter((ed, i) => i !== idx)
-                            .reduce((sum, ed) => sum + (ed.percentage || 100), 0);
-                        
-                        // Cap at remaining available (100 - otherTotal)
-                        const maxAvailable = Math.max(0, 100 - otherTotal);
-                        if (newVal > maxAvailable) {
-                            newVal = maxAvailable;
-                            if (maxAvailable >= 0) {
-                                showToast(`Capped at ${maxAvailable}% (${otherTotal}% already allocated)`, false);
-                            }
-                        }
-                        
                         edge.percentage = newVal;
                         input.value = newVal;
                     }
@@ -583,7 +579,37 @@ function renderField(f, val = '', readonly = false) {
 }
 
 function deleteNode(nid) {
+    nid = String(nid);
+    
+    // Find all rules that have edges to/from this node
+    const affectedRules = new Set();
+    edges.forEach(e => {
+        if (String(e.fromNode) === nid && nodes[e.toNode]?.type === 'rule') {
+            affectedRules.add(String(e.toNode));
+        }
+        if (String(e.toNode) === nid && nodes[e.fromNode]?.type === 'rule') {
+            affectedRules.add(String(e.fromNode));
+        }
+    });
+    
+    // Remove edges connected to this node
     edges = edges.filter(e => e.fromNode !== nid && e.toNode !== nid);
+    
+    // Auto-redistribute percentages for affected rules
+    affectedRules.forEach(ruleId => {
+        const rule = nodes[ruleId];
+        if (rule && rule.data.rule_type === 'split') {
+            const ruleEdges = edges.filter(e => String(e.fromNode) === ruleId);
+            if (ruleEdges.length > 0) {
+                // Redistribute equally among remaining edges
+                const perEdge = Math.floor(100 / ruleEdges.length);
+                ruleEdges.forEach(e => {
+                    e.percentage = perEdge;
+                });
+            }
+        }
+    });
+    
     nodes[nid]?.el.remove();
     delete nodes[nid];
     if (selectedNode === nid) selectedNode = null;
