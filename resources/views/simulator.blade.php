@@ -500,13 +500,12 @@ function updateAllocationFields() {
                 input.type = 'number';
                 input.min = '0';
                 input.max = '100';
-                input.value = edge.percentage || 100;
+                input.value = edge.percentage !== undefined ? edge.percentage : 100;
                 input.disabled = outgoingEdges.length === 1;  // Disable if only one connection
                 input.style.cssText = 'width:50px;padding:.2rem .4rem;border-radius:4px;border:1px solid rgba(255,255,255,.13);background:rgba(255,255,255,.07);color:#e2e8f0;font-size:.7rem;font-family:inherit;' + (outgoingEdges.length === 1 ? 'opacity:0.6;cursor:not-allowed;' : '');
                 
                 input.addEventListener('change', e => {
                     let newVal = parseFloat(e.target.value) || 0;
-                    newVal = Math.max(0, Math.min(100, newVal)); // Clamp to 0-100
                     
                     // If only one connection, force 100%
                     if (outgoingEdges.length === 1) {
@@ -514,18 +513,17 @@ function updateAllocationFields() {
                         input.value = 100;
                         edge.percentage = 100;
                     } else {
+                        // Calculate total from OTHER edges
+                        const otherTotal = outgoingEdges
+                            .filter((ed, i) => i !== idx)
+                            .reduce((sum, ed) => sum + (ed.percentage || 0), 0);
+                        
+                        // Cap at remaining available (100 - otherTotal)
+                        const maxAvailable = Math.max(0, 100 - otherTotal);
+                        newVal = Math.max(0, Math.min(maxAvailable, newVal));
+                        
                         edge.percentage = newVal;
                         input.value = newVal;
-                        
-                        // Calculate total and warn if exceeds 100%
-                        let total = 0;
-                        outgoingEdges.forEach(ed => {
-                            total += ed.percentage || 0;
-                        });
-                        
-                        if (total > 100) {
-                            showToast(`Total is ${total}% (exceeds 100%)`, false);
-                        }
                     }
                     
                     updateAllocationFields(); // Recalculate totals
