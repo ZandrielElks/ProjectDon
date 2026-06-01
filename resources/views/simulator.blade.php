@@ -480,7 +480,7 @@ function updateAllocationFields() {
             // Calculate current total
             let totalPercentage = 0;
             outgoingEdges.forEach(edge => {
-                totalPercentage += edge.percentage || 100;
+                totalPercentage += (edge.percentage !== undefined ? edge.percentage : 100);
             });
             
             // Render allocation fields
@@ -743,7 +743,7 @@ function wouldCreateCycle(fromNode, toNode) {
 
 // Prompt for percentage allocation on split rule connections
 function promptForPercentage(edge) {
-    const percentage = prompt('Enter percentage allocation for this connection (0-100):', edge.percentage || 100);
+    const percentage = prompt('Enter percentage allocation for this connection (0-100):', edge.percentage !== undefined ? edge.percentage : 100);
     if (percentage !== null) {
         const val = parseFloat(percentage);
         if (!isNaN(val) && val >= 0 && val <= 100) {
@@ -910,7 +910,7 @@ async function saveWorkflow() {
         edges: edges.map(e => ({
             source: e.fromNode, source_port: e.fromPort,
             target: e.toNode,   target_port: e.toPort,
-            percentage: e.percentage || 100,
+            percentage: e.percentage !== undefined ? e.percentage : 100,
         })),
     };
     try {
@@ -980,9 +980,6 @@ async function runSimulation() {
     const periods  = parseInt(document.getElementById('simPeriods').value) || 12;
     const timeUnit = document.getElementById('simUnit').value;
     closeSimModal();
-    simulationCompleted = false;  // Reset flag for new simulation
-    animationCancelled = false;   // Reset cancellation flag for new simulation
-    currentPeriod = 1;            // Reset to period 1 when starting new simulation
     await saveWorkflow();
     showToast('Running simulation…');
     try {
