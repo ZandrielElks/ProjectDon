@@ -516,6 +516,16 @@ function updateAllocationFields() {
                     } else {
                         edge.percentage = newVal;
                         input.value = newVal;
+                        
+                        // Calculate total and warn if exceeds 100%
+                        let total = 0;
+                        outgoingEdges.forEach(ed => {
+                            total += ed.percentage || 0;
+                        });
+                        
+                        if (total > 100) {
+                            showToast(`Total is ${total}% (exceeds 100%)`, false);
+                        }
                     }
                     
                     updateAllocationFields(); // Recalculate totals
