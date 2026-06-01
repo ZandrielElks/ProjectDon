@@ -1333,12 +1333,40 @@ function renderSimResults(data) {
 
     // Transaction log rows - show all logs
     const rows = (data.logs || []).map(l => {
-        const color = l.type === 'income' ? '#4ade80' : 
-                      l.type === 'rule' ? '#f59e0b' : 
-                      l.type === 'trigger' ? '#fbbf24' : '#f87171';
-        const bg    = l.type === 'income' ? 'rgba(74,222,128,.15)' : 
-                      l.type === 'rule' ? 'rgba(245,158,11,.15)' :
-                      l.type === 'trigger' ? 'rgba(251,191,36,.15)' : 'rgba(248,113,113,.15)';
+        let color, bg;
+        
+        // Determine color based on type and status
+        if (l.type === 'income') {
+            color = '#4ade80';
+            bg = 'rgba(74,222,128,.15)';
+        } else if (l.type === 'rule') {
+            color = '#f59e0b';
+            bg = 'rgba(245,158,11,.15)';
+        } else if (l.type === 'trigger') {
+            color = '#fbbf24';
+            bg = 'rgba(251,191,36,.15)';
+        } else if (l.type === 'expense') {
+            // Check if this is a paid expense with no debt/surplus
+            if (!l.node.includes('(debt)') && !l.node.includes('(surplus)')) {
+                // Fully paid expense - use purple
+                color = '#a78bfa';
+                bg = 'rgba(167,139,250,.15)';
+            } else if (l.node.includes('(debt)')) {
+                // Debt - use red
+                color = '#f87171';
+                bg = 'rgba(248,113,113,.15)';
+            } else if (l.node.includes('(surplus)')) {
+                // Surplus - use green
+                color = '#4ade80';
+                bg = 'rgba(74,222,128,.15)';
+            } else {
+                color = '#f87171';
+                bg = 'rgba(248,113,113,.15)';
+            }
+        } else {
+            color = '#f87171';
+            bg = 'rgba(248,113,113,.15)';
+        }
         
         // Handle "Split" text for rule amounts
         const amountDisplay = (typeof l.amount === 'string') ? l.amount : fmt(l.amount);
