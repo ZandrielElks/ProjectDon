@@ -1395,8 +1395,8 @@ function renderSimResults(data) {
         // Handle "Split" text for rule amounts
         const amountDisplay = (typeof l.amount === 'string') ? l.amount : fmt(l.amount);
         
-        // Show "(paid)" for debt entries instead of node name
-        const displayNode = l.is_debt ? `${l.node} (paid)` : l.node;
+        // Show "(debt)" for debt entries instead of node name
+        const displayNode = l.is_debt ? `${l.node} (debt)` : l.node;
         
         return `<tr>
             <td style="padding:.25rem .5rem;color:#94a3b8;">${l.period}</td>
@@ -1480,7 +1480,8 @@ async function saveSimulationTransactions() {
                 });
             } else if (log.type === 'expense') {
                 // Expense: save each expense once per period
-                const expenseKey = `${log.period}_${log.node}`;
+                // Include is_debt in the key so debt and regular expenses are tracked separately
+                const expenseKey = `${log.period}_${log.node}_${log.is_debt ? 'debt' : 'regular'}`;
                 if (savedExpenses.has(expenseKey)) {
                     return; // Already saved this expense for this period
                 }
@@ -1500,20 +1501,26 @@ async function saveSimulationTransactions() {
                     txnDate.setFullYear(txnDate.getFullYear() + period);
                 }
                 
-                // Check if this is a debt entry
-                const categoryName = log.is_debt ? 'Tagihan' : log.node;
-                const description = log.is_debt 
-                    ? `Debt: ${log.node} from period ${log.period}`
-                    : `Simulated expense from period ${log.period}`;
-                
-                transactions.push({
-                    amount: amount,
-                    type: 'expense',
-                    category_name: categoryName,
-                    description: description,
-                    date: txnDate.toISOString().split('T')[0],
-                    is_debt: log.is_debt || false
-                });
+                if (log.is_debt) {
+                    // Debt: create a Bill and transaction with same category
+                    transactions.push({
+                        amount: amount,
+                        type: 'expense',
+                        category_name: log.node,  // Use the original node name as category
+                        description: `Debt: ${log.node} from period ${log.period}`,
+                        date: txnDate.toISOString().split('T')[0],
+                        is_debt: true,
+                    });
+                } else {
+                    // Regular expense
+                    transactions.push({
+                        amount: amount,
+                        type: 'expense',
+                        category_name: log.node,
+                        description: `Simulated expense from period ${log.period}`,
+                        date: txnDate.toISOString().split('T')[0]
+                    });
+                }
             }
         });
 

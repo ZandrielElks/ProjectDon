@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 
 use App\Models\Transaction;
 use App\Models\Category;
+use App\Models\Bill;
 
 class TransactionController extends Controller
 {
@@ -98,29 +99,68 @@ class TransactionController extends Controller
         $simulationGroup = 'SIM-' . now()->format('YmdHis') . '-' . uniqid();
 
         foreach ($request->transactions as $txnData) {
-            // Find or create category by name
-            $category = Category::where('name', $txnData['category_name'])->first();
+            // Check if this is a debt transaction
+            if (isset($txnData['is_debt']) && $txnData['is_debt']) {
+                // Find or create category by name (use original category, not Tagihan)
+                $category = Category::where('name', $txnData['category_name'])->first();
 
-            if (!$category) {
-                // Auto-create category if it doesn't exist
-                $category = Category::create([
-                    'name' => $txnData['category_name'],
-                    'type' => $txnData['type'],
+                if (!$category) {
+                    // Auto-create category if it doesn't exist
+                    $category = Category::create([
+                        'name' => $txnData['category_name'],
+                        'type' => 'expense',
+                        'amount' => $txnData['amount'],
+                    ]);
+                }
+
+                // Create a Bill for this debt
+                $bill = Bill::create([
+                    'name' => $txnData['category_name'] . ' debt',
                     'amount' => $txnData['amount'],
+                    'due_date' => $txnData['date'],
+                    'status' => 'unpaid',
+                    'category_id' => $category->id,
                 ]);
+
+                // Create transaction linked to the bill
+                Transaction::create([
+                    'amount' => $txnData['amount'],
+                    'type' => $txnData['type'],
+                    'category_id' => $category->id,
+                    'description' => $txnData['description'] ?? null,
+                    'date' => $txnData['date'],
+                    'simulation_group' => $simulationGroup,
+                    'is_debt' => true,
+                    'bill_id' => $bill->id,
+                ]);
+
+                $savedCount++;
+            } else {
+                // Regular transaction - find or create category by name
+                $category = Category::where('name', $txnData['category_name'])->first();
+
+                if (!$category) {
+                    // Auto-create category if it doesn't exist
+                    $category = Category::create([
+                        'name' => $txnData['category_name'],
+                        'type' => $txnData['type'],
+                        'amount' => $txnData['amount'],
+                    ]);
+                }
+
+                // Create transaction
+                Transaction::create([
+                    'amount' => $txnData['amount'],
+                    'type' => $txnData['type'],
+                    'category_id' => $category->id,
+                    'description' => $txnData['description'] ?? null,
+                    'date' => $txnData['date'],
+                    'simulation_group' => $simulationGroup,
+                    'is_debt' => false,
+                ]);
+
+                $savedCount++;
             }
-
-            // Create transaction
-            Transaction::create([
-                'amount' => $txnData['amount'],
-                'type' => $txnData['type'],
-                'category_id' => $category->id,
-                'description' => $txnData['description'] ?? null,
-                'date' => $txnData['date'],
-                'simulation_group' => $simulationGroup,
-            ]);
-
-            $savedCount++;
         }
 
         return response()->json([

@@ -60,15 +60,23 @@
                             <td style="padding: 0.5rem;">{{ \Carbon\Carbon::parse($txn->date)->format('d M Y') }}</td>
                             <td style="padding: 0.5rem;">
                                 @php
-                                    $badgeClass = $txn->type == 'income' ? 'badge-income' : 'badge-expense';
                                     $badgeColor = $txn->type == 'income' ? '#4ade80' : '#f87171';
-                                    // Brown color for Tagihan (debt)
-                                    if ($txn->category->name === 'Tagihan') {
-                                        $badgeColor = '#a16207';
+                                    $displayText = $txn->category->name;
+                                    
+                                    // Check if this is a debt transaction
+                                    if ($txn->is_debt) {
+                                        // Check if the related bill is paid
+                                        if ($txn->bill && $txn->bill->status === 'paid') {
+                                            $badgeColor = '#a16207';  // Brown for paid debt
+                                            $displayText = $txn->category->name . ' (paid)';
+                                        } else {
+                                            $badgeColor = '#f87171';  // Red for unpaid debt
+                                            $displayText = $txn->category->name . ' (debt)';
+                                        }
                                     }
                                 @endphp
                                 <span class="badge" style="background: {{ $badgeColor }}22; color: {{ $badgeColor }}; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">
-                                    {{ $txn->category->name }}
+                                    {{ $displayText }}
                                 </span>
                             </td>
                             <td style="padding: 0.5rem; color: var(--text-muted);">{{ $txn->description }}</td>

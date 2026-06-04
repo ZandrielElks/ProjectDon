@@ -342,7 +342,7 @@ class SimulationEngine
                         $balance -= $allocatedAmount;
                         $periodExpense += $allocatedAmount;
                         
-                        // Log the allocated payment
+                        // Log the allocated expense amount (purple)
                         $events[] = [
                             'period' => $period,
                             'type' => 'expense',
@@ -356,7 +356,7 @@ class SimulationEngine
                         
                         if ($remaining > 0) {
                             // Debt: expense is more than allocated
-                            // Log to Tagihan (Bills) category
+                            // Log the debt amount (red) with same category
                             $balance -= $remaining;
                             $periodExpense += $remaining;
                             $events[] = [
@@ -365,7 +365,6 @@ class SimulationEngine
                                 'node' => $target->name,
                                 'amount' => round($remaining, 2),
                                 'balance' => round($balance, 2),
-                                'category' => 'Tagihan',  // Use Tagihan for debt
                                 'is_debt' => true,
                             ];
                         } elseif ($remaining < 0) {
