@@ -7,15 +7,15 @@ use App\Models\Workflow;
 /**
  * SimulationEngine
  *
- * Runs a period-by-period financial simulation over a node graph.
+ * Menjalankan simulasi keuangan periode-demi-periode pada graph node.
  *
- * Node types:
- *   income          – generates money each period
- *   rule            – routes money (split by percentage, or priority based on expense amounts)
- *   outcome         – deducts money (expense) — only fires when connected in the graph
+ * Tipe node:
+ *   income          – menghasilkan uang setiap periode
+ *   rule            – mengarahkan uang (split berdasarkan persentase, atau prioritas berdasarkan jumlah pengeluaran)
+ *   outcome         – mengurangi uang (pengeluaran) — hanya aktif ketika terhubung dalam graph
  *
- * Graph is stored as adjacency lists built from the workflow's
- * FlowObject and ObjectConnection records.
+ * Graph disimpan sebagai adjacency lists yang dibangun dari
+ * record FlowObject dan ObjectConnection milik workflow.
  */
 class SimulationEngine
 {
@@ -44,7 +44,7 @@ class SimulationEngine
         }
     }
 
-    // ── Public entry point ────────────────────────────────────────────────
+    // ── Titik masuk publik ────────────────────────────────────────────────
 
     public function run(int $periods = 12, string $timeUnit = 'month'): array
     {
@@ -52,10 +52,10 @@ class SimulationEngine
         $timeline = [];
         $logs = [];
         $firedOnce = [];
-        $periodFiredExpenses = [];  // Track which expenses fired per period
+        $periodFiredExpenses = [];  // Lacak pengeluaran mana yang sudah diproses per periode
 
-        // Pre-compute which income nodes feed which rule nodes (for amount lookup)
-        // and which rule nodes are "roots" (fed by income)
+        // Pra-hitung node income mana yang memberi makan node rule mana (untuk pencarian jumlah)
+        // dan node rule mana yang merupakan "roots" (diberi makan oleh income)
         $incomeForRule = [];  // ruleId → [incomeId, ...]
         foreach ($this->nodes as $id => $obj) {
             if ($obj->type === 'income') {
@@ -73,8 +73,8 @@ class SimulationEngine
             $periodEvents  = [];
             $periodFiredExpenses[$p] = [];
 
-            // ── Step 1: Fire all income nodes, collect how much each rule receives ──
-            $ruleReceivedAmount = [];  // ruleId → total amount pushed to it this period
+            // ── Langkah 1: Aktifkan semua node income, kumpulkan berapa banyak yang diterima setiap rule ──
+            $ruleReceivedAmount = [];  // ruleId → total jumlah yang didorong ke sana periode ini
 
             foreach ($this->nodes as $id => $obj) {
                 if ($obj->type !== 'income') continue;
@@ -103,7 +103,7 @@ class SimulationEngine
                     'balance' => round($balance, 2),
                 ];
 
-                // Track amount reaching each directly-connected rule
+                // Lacak jumlah yang mencapai setiap rule yang terhubung langsung
                 foreach ($this->adjOut[$id] ?? [] as $tgtId) {
                     $tgt = $this->nodes[$tgtId] ?? null;
                     if (!$tgt) continue;
@@ -111,19 +111,19 @@ class SimulationEngine
                         $ruleReceivedAmount[$tgtId] = ($ruleReceivedAmount[$tgtId] ?? 0.0) + $net;
                     }
                 }
-                // Note: we no longer call pushFlow from income directly.
-                // Rule nodes are fired in Step 2 below, which handles all periods correctly.
+                // Catatan: kita tidak lagi memanggil pushFlow dari income secara langsung.
+                // Node rule diaktifkan di Langkah 2 di bawah, yang menangani semua periode dengan benar.
             } // end income foreach
 
-            // ── Step 2: Fire rules that received money OR have recurring outcomes ──
+            // ── Langkah 2: Aktifkan rule yang menerima uang ATAU memiliki outcome berulang ──
             foreach ($this->nodes as $id => $obj) {
                 if ($obj->type !== 'rule') continue;
                 if (!isset($incomeForRule[$id])) continue;
 
-                // Check if money reached this rule this period
+                // Periksa apakah uang mencapai rule ini periode ini
                 $hasMoneyThisPeriod = isset($ruleReceivedAmount[$id]) && $ruleReceivedAmount[$id] > 0;
                 
-                // Check if any connected outcomes are recurring and will fire this period
+                // Periksa apakah ada outcome yang terhubung yang berulang dan akan aktif periode ini
                 $hasRecurringOutcome = false;
                 $ruleTargets = $this->adjOut[$id] ?? [];
                 foreach ($ruleTargets as $targetId) {
@@ -133,7 +133,7 @@ class SimulationEngine
                     $targetData = $target->data_json ?? [];
                     $targetFreq = $targetData['frequency'] ?? 'monthly';
                     
-                    // Skip one-time outcomes
+                    // Lewati outcome satu kali
                     if ($targetFreq === 'one-time') continue;
                     
                     $targetCount = $this->fireCount($targetFreq, $p, 0, $timeUnit, $firedOnce, $targetId);
@@ -143,7 +143,7 @@ class SimulationEngine
                     }
                 }
 
-                // Only fire if money reached OR has recurring outcomes to process
+                // Hanya aktifkan jika uang mencapai ATAU memiliki outcome berulang untuk diproses
                 if (!$hasMoneyThisPeriod && !$hasRecurringOutcome) {
                     continue;
                 }
@@ -151,23 +151,23 @@ class SimulationEngine
                 $data     = $obj->data_json ?? [];
                 $ruleType = $data['rule_type'] ?? 'split';
 
-                // Amount for split calculations:
-                // Use money that reached this period, or use available balance for recurring outcomes
+                // Jumlah untuk perhitungan split:
+                // Gunakan uang yang mencapai periode ini, atau gunakan saldo tersedia untuk outcome berulang
                 $amountForRule = $ruleReceivedAmount[$id] ?? 0.0;
                 if ($amountForRule <= 0.0 && $hasRecurringOutcome) {
-                    // No new income, but recurring outcomes need processing
-                    // Use current balance if positive, otherwise 0 (all expenses become debt)
+                    // Tidak ada income baru, tapi outcome berulang perlu diproses
+                    // Gunakan saldo saat ini jika positif, jika tidak 0 (semua pengeluaran menjadi hutang)
                     $amountForRule = max(0.0, $balance);
                 }
                 
-                // Skip if no money AND no recurring outcomes
+                // Lewati jika tidak ada uang DAN tidak ada outcome berulang
                 if ($amountForRule <= 0.0 && !$hasRecurringOutcome) {
                     continue;
                 }
                 
-                // Allow rule to fire even with 0 allocation if there are recurring outcomes
+                // Izinkan rule untuk aktif bahkan dengan alokasi 0 jika ada outcome berulang
                 if ($hasRecurringOutcome) {
-                    // Rule fires regardless of amount
+                    // Rule aktif terlepas dari jumlah
                 } elseif ($amountForRule <= 0.0) {
                     continue;
                 }
