@@ -34,7 +34,10 @@
             <div style="display: flex; gap: 2rem; font-size: 0.9rem;">
                 <span style="color: var(--success);">Income: +Rp {{ number_format($group->total_income, 0, ',', '.') }}</span>
                 <span style="color: var(--danger);">Expense: -Rp {{ number_format($group->total_expense, 0, ',', '.') }}</span>
-                <span style="color: var(--text-muted);">Net: Rp {{ number_format($group->total_income - $group->total_expense, 0, ',', '.') }}</span>
+                @if($group->final_surplus > 0)
+                    <span style="color: #22d3ee;">Final Surplus: +Rp {{ number_format($group->final_surplus, 0, ',', '.') }}</span>
+                @endif
+                <span style="color: var(--text-muted);">Net: Rp {{ number_format($group->total_income - $group->total_expense + $group->final_surplus, 0, ',', '.') }}</span>
             </div>
             
             {{-- Hidden details table --}}
@@ -61,18 +64,27 @@
                             <td style="padding: 0.5rem;">
                                 @php
                                     $badgeColor = $txn->type == 'income' ? '#4ade80' : '#f87171';
-                                    $displayText = $txn->category->name;
                                     
-                                    // Check if this is a debt transaction
-                                    if ($txn->is_debt) {
-                                        // Check if the related bill is paid
-                                        if ($txn->bill && $txn->bill->status === 'paid') {
-                                            $badgeColor = '#a16207';  // Brown for paid debt
-                                            $displayText = $txn->category->name . ' (paid)';
-                                        } else {
-                                            $badgeColor = '#f87171';  // Red for unpaid debt
-                                            $displayText = $txn->category->name . ' (debt)';
+                                    // Check if this is a surplus transaction
+                                    if ($txn->is_surplus) {
+                                        $displayText = 'Surplus';
+                                        $badgeColor = '#22d3ee';  // Cyan for surplus
+                                    } elseif ($txn->category) {
+                                        $displayText = $txn->category->name;
+                                        
+                                        // Check if this is a debt transaction
+                                        if ($txn->is_debt) {
+                                            // Check if the related bill is paid
+                                            if ($txn->bill && $txn->bill->status === 'paid') {
+                                                $badgeColor = '#a16207';  // Brown for paid debt
+                                                $displayText = $txn->category->name . ' (paid)';
+                                            } else {
+                                                $badgeColor = '#f87171';  // Red for unpaid debt
+                                                $displayText = $txn->category->name . ' (debt)';
+                                            }
                                         }
+                                    } else {
+                                        $displayText = 'Unknown';
                                     }
                                 @endphp
                                 <span class="badge" style="background: {{ $badgeColor }}22; color: {{ $badgeColor }}; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">

@@ -34,11 +34,22 @@ class TransactionController extends Controller
             ->selectRaw('MIN(date) as start_date')
             ->selectRaw('MAX(date) as end_date')
             ->selectRaw('COUNT(*) as transaction_count')
-            ->selectRaw('SUM(CASE WHEN type = "income" THEN amount ELSE 0 END) as total_income')
+            ->selectRaw("SUM(CASE WHEN type = 'income' AND is_surplus = 0 THEN amount ELSE 0 END) as total_income")
             ->selectRaw('SUM(CASE WHEN type = "expense" THEN amount ELSE 0 END) as total_expense')
             ->groupBy('simulation_group')
             ->orderBy('start_date', 'desc')
             ->get();
+
+        // Calculate final surplus for each group (only if last transaction is surplus)
+        foreach ($simulationGroups as $group) {
+            $lastTransaction = Transaction::where('simulation_group', $group->simulation_group)
+                ->orderBy('date', 'desc')
+                ->orderBy('id', 'desc')  // In case of same date, use latest by ID
+                ->first();
+            
+            // Only count surplus if the very last transaction is a surplus
+            $group->final_surplus = ($lastTransaction && $lastTransaction->is_surplus) ? $lastTransaction->amount : 0;
+        }
         
         $categories = Category::all();
 
@@ -99,15 +110,36 @@ class TransactionController extends Controller
         $simulationGroup = 'SIM-' . now()->format('YmdHis') . '-' . uniqid();
 
         foreach ($request->transactions as $txnData) {
+            // Check if this is a surplus entry (informational, not counted in totals)
+            $isSurplus = isset($txnData['category_name']) && strpos($txnData['category_name'], '(surplus)') !== false;
+            
+            // Handle surplus entries - save without category
+            if ($isSurplus) {
+                Transaction::create([
+                    'amount' => $txnData['amount'],
+                    'type' => 'income',
+                    'category_id' => null,  // No category for surplus
+                    'description' => $txnData['description'] ?? 'Surplus from simulation',
+                    'date' => $txnData['date'],
+                    'simulation_group' => $simulationGroup,
+                    'is_debt' => false,
+                    'is_surplus' => true,
+                ]);
+                
+                $savedCount++;
+                continue;
+            }
+            
             // Check if this is a debt transaction
             if (isset($txnData['is_debt']) && $txnData['is_debt']) {
                 // Find or create category by name (use original category, not Tagihan)
-                $category = Category::where('name', $txnData['category_name'])->first();
+                $categoryName = $txnData['category_name'];
+                $category = Category::where('name', $categoryName)->first();
 
                 if (!$category) {
                     // Auto-create category if it doesn't exist
                     $category = Category::create([
-                        'name' => $txnData['category_name'],
+                        'name' => $categoryName,
                         'type' => 'expense',
                         'amount' => $txnData['amount'],
                     ]);
@@ -115,7 +147,7 @@ class TransactionController extends Controller
 
                 // Create a Bill for this debt
                 $bill = Bill::create([
-                    'name' => $txnData['category_name'] . ' debt',
+                    'name' => $categoryName . ' debt',
                     'amount' => $txnData['amount'],
                     'due_date' => $txnData['date'],
                     'status' => 'unpaid',

@@ -1315,7 +1315,7 @@ function renderSimResults(data) {
     const labels       = tl.map(t => t.label);
     const totalIncome  = tl.reduce((s, t) => s + t.income,  0);
     const totalExpense = tl.reduce((s, t) => s + t.expense, 0);
-    const finalBal     = data.final_balance;
+    const finalBal     = totalIncome - totalExpense;
 
     // Summary cards
     document.getElementById('simSummary').innerHTML = [
@@ -1332,9 +1332,19 @@ function renderSimResults(data) {
     // Shared chart options
     const scales = {
         x: { ticks: { color: '#64748b', font: { size: 8 } }, grid: { color: 'rgba(255,255,255,.05)' } },
-        y: { ticks: { color: '#64748b', font: { size: 8 },
-                      callback: v => (v / 1e6).toFixed(1) + 'M' },
-             grid: { color: 'rgba(255,255,255,.05)' } },
+        y: { 
+            ticks: { 
+                color: '#64748b', 
+                font: { size: 8 },
+                callback: v => (v / 1e6).toFixed(1) + 'M' 
+            },
+            grid: { 
+                color: 'rgba(255,255,255,.05)',
+                drawTicks: true
+            },
+            // Allow negative values on y-axis
+            grace: '5%'  // Add 5% padding on both ends
+        },
     };
     const legend = { labels: { color: '#94a3b8', font: { size: 9 } }, position: 'bottom' };
 

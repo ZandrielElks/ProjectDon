@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Transaction extends Model
 {
-    protected $fillable = ['amount', 'type', 'category_id', 'description', 'date', 'simulation_group', 'is_debt', 'bill_id'];
+    protected $fillable = ['amount', 'type', 'category_id', 'description', 'date', 'simulation_group', 'is_debt', 'bill_id', 'is_surplus'];
 
     public function category()
     {
